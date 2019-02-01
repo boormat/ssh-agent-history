@@ -24,10 +24,15 @@ Maybe the message code in go might be small fast enough to ignore bash?  (Especi
  ## Bash
  
  Testing... with bash.
- printf  '\x0\x0\x0\x01\xB' | nc -U  $SSH_AUTH_SOCK
+ Getting binary output needs a escape codes.  To do it dynamically, chain 2 printfs
+   printf  '\x23\n' | xxd
+   printf $(printf '\\x%d\\n' 23 ) | xxd
 
+Talking to unix domain sockets seems to need netcat.
+  printf  '\x0\x0\x0\x01\xB' | nc -U  $SSH_AUTH_SOCK
+ 
   printf  '\x0\x0\x0\x0A\x1B\x0\x0\x0\x05Hello' | nc -U  $SSH_AUTH_SOCK
-  printf  '\x0\x0\x0\x0E\x1B\x0\x0\x0\x05Hello\x0\x0\x0\x0' | nc -U  $SSH_AUTH_SOCK | xxd
+  printf  '\x0\lx0\x0\x0E\x1B\x0\x0\x0\x05Hello\x0\x0\x0\x0' | nc -U  $SSH_AUTH_SOCK | xxd
   printf  '\x0\x0\x0\x0E\x1B\x0\x0\x0\x05Hello\x0\x0\x0\x0' | nc -U  $SSH_AUTH_SOCK | xxd
 
 Message format is 4 bytes of message length, then 1 byte of message type, then per message.
