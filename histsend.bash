@@ -20,15 +20,16 @@ function to_ssh_string() {
     # that can in turn be passed to printf to output binary.
     declare -i l
     l=${#1}
-    printf '%s%q' "$(to_ssh_int32 l)" "$1"
+    printf '%s%b' "$(to_ssh_int32 l)" "$1"
 }
 
-function hist_send() {
+function hist_get() {
     # arg 1 is Comma
     # history -s
     local _cmd
     _cmd="$(history 1)"
     _cmd=${_cmd:7}
+    # _cmd="TEST EST"
 
     # in message to ssh-agent we want... 
     # command, hostname, User name
@@ -38,15 +39,23 @@ function hist_send() {
     local payloadlen="$(( 4 + ${#_cmd} + 4 + ${#HOSTNAME} + 4 + ${#UID} ))" # 3 strings
     local totallen="$(( 1 + 4 + ${#msgtype} + 4 + payloadlen ))"
 
-    printf "$(\
-        to_ssh_int32 totallen ; \
-        to_ssh_int8 27 ; \
-        to_ssh_string "${msgtype}"; \
-        to_ssh_int32 payloadlen ; \
-        to_ssh_string "${_cmd}" ; \
-        to_ssh_string "${HOSTNAME}"; \
-        to_ssh_string "${UID}" )"  \
-        | nc -U  $SSH_AUTH_SOCK | xxd
+    printf %s%s%s%s%s%s%s \
+        "$(to_ssh_int32 totallen )" \
+        "$(to_ssh_int8 27 )" \
+        "$(to_ssh_string "${msgtype}" )" \
+        "$(to_ssh_int32 payloadlen )" \
+        "$(to_ssh_string "${_cmd}" )" \
+        "$(to_ssh_string "${HOSTNAME}" )" \
+        "$(to_ssh_string "${UID}" )"  
+}
+
+function hist_send() {
+    echo send
+    printf "$(hist_get)"    | nc -U  $SSH_AUTH_SOCK | xxd
+    echo sent
+}
+function hist_sendd() {
+    printf "$(hist_get)"    | xxd
 }
 
 function history_trap() {

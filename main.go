@@ -22,6 +22,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/user"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -51,9 +53,9 @@ func (r myExtendedAgent) SignWithFlags(key ssh.PublicKey, data []byte, flags age
 }
 
 type historyMsgContent struct {
-	command  string
-	hostname string
-	user     string
+	Command  string
+	Hostname string
+	User     string
 }
 
 // In the case of success, since [PROTOCOL.agent] section 4.7 specifies that the contents
@@ -66,18 +68,18 @@ func (r myExtendedAgent) Extension(extensionType string, contents []byte) ([]byt
 		// parse the contents.  3 Strings is expected, command, hostname, userid.
 		var req historyMsgContent
 		if err := ssh.Unmarshal(contents, &req); err != nil {
-			log.Print("Bad Extension Message:", extensionType, contents)
+			log.Print("Bad Extension Message:", extensionType, contents, err)
 			return nil, err
 		}
 
 		ts := time.Now()
 
 		// write timestamp and other meta
-
-		if _, err := r.histfile.Write([]byte(fmt.Sprintf("#%d %s %s\n", ts.Unix(), req.hostname, req.user))); err != nil {
+		// TODO combinto one write, unbuffered IO.
+		if _, err := r.histfile.Write([]byte(fmt.Sprintf("#%d %s %s\n", ts.Unix(), req.Hostname, req.User))); err != nil {
 			log.Fatal(err)
 		}
-		if _, err := r.histfile.Write([]byte(fmt.Sprintln(req.command))); err != nil {
+		if _, err := r.histfile.Write([]byte(fmt.Sprintln(req.Command))); err != nil {
 			log.Fatal(err)
 		}
 
@@ -87,29 +89,49 @@ func (r myExtendedAgent) Extension(extensionType string, contents []byte) ([]byt
 	}
 
 	// histfile io.Writer
-	return []byte("yo Bogus MEssage"), nil
+	// return []byte("yo Bogus MEssage"), nil
+	return []byte(""), nil
 }
 
 func main() {
+	var pipeFile string
+	pid := os.Getpid()
+	pipeFile, testmode := os.LookupEnv("TEST_SSH_AUTH_SOCK")
+	if !testmode {
 
-	// Create the SSH Agent Named Pipe
-	tmpDir, err := ioutil.TempDir("", "ssh-go")
+		// Create the SSH Agent Named Pipe
+		tmpDir, err := ioutil.TempDir("", "ssh-go")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		pipeFile = filepath.Join(tmpDir, fmt.Sprint("agent.", pid))
+		defer os.Remove(pipeFile)
+	} else {
+		_ = os.Remove(pipeFile) // test mode
+	}
+	listener, err := net.Listen("unix", pipeFile)
 	if err != nil {
 		log.Fatal(err)
 	}
-	pid := os.Getpid()
-	pipeFile := filepath.Join(tmpDir, fmt.Sprint("agent.", pid))
-	listener, err := net.Listen("unix", pipeFile)
 	defer listener.Close()
-	defer os.Remove(pipeFile)
-	defer os.RemoveAll(tmpDir)
-	log.Println(listener)
+	log.Println("Listening to", pipeFile)
 
 	// config time
-	histfilename, _ := os.LookupEnv("AGENT_HISTFILE")
+	histfilename := os.Getenv("AGENT_HISTFILE")
+	if histfilename == "" {
+		usr, err := user.Current()
+		if err != nil {
+			log.Fatal(err)
+		}
+		histfilename = path.Join(usr.HomeDir, ".history_all")
+	}
+
 	hf, err := os.OpenFile(histfilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
-		log.Fatal("Could not create/open history file", histfilename, err)
+		// log.Println(histfilename)
+		log.Fatal("Could not create/open history file: ", err)
 	}
 	defer hf.Close()
 
@@ -122,10 +144,10 @@ func main() {
 	var a agent.Agent
 	a = ea
 
-	if eaa, ok := a.(agent.ExtendedAgent); !ok {
+	if _, ok := a.(agent.ExtendedAgent); !ok {
 		log.Fatal(a, ok)
 	} else {
-		eaa.Extension("yo", nil)
+		// eaa.Extension("yo", nil)
 	}
 	// ssh-agent has a UNIX socket under $SSH_AUTH_SOCK
 	// Output the ssh-agent compatible env vars for evaling.
@@ -147,5 +169,9 @@ func main() {
 func handleClient(a myExtendedAgent, connection net.Conn) {
 	defer println("closed", connection)
 	defer connection.Close()
-	agent.ServeAgent(a, connection)
+	err := agent.ServeAgent(a, connection)
+	if err != nil && err != io.EOF {
+		// EOF is expected.
+		log.Print("Error: ServeAgent :", err)
+	}
 }

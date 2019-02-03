@@ -10,7 +10,9 @@
             "request": "launch",
             "mode": "auto",
             "program": "${fileDirname}",
-            "env": {},
+            "env": {
+                "TEST_SSH_AUTH_SOCK": "/tmp/testsshauth"
+            },
             "args": []
         }
     ]
