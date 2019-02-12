@@ -1,20 +1,5 @@
 package main
 
-// import (
-// 	// "strings"
-// 	"golang.org/x/crypto/ssh"
-// 	"golang.org/x/crypto/ssh/agent"
-// 	"log"
-// 	"net"
-// 	"os"
-// )
-// go ServeAgent(NewKeyring(), c2)
-// Copyright 2016 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// package main
-
 import (
 	"fmt"
 	"io"
@@ -26,8 +11,6 @@ import (
 	"path"
 	"path/filepath"
 	"time"
-
-	// "golang.org/x/crypto/ssh"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -75,7 +58,6 @@ func (r myExtendedAgent) Extension(extensionType string, contents []byte) ([]byt
 		ts := time.Now()
 
 		// write timestamp and other meta
-		// TODO combinto one write, unbuffered IO.
 		if _, err := r.histfile.Write([]byte(fmt.Sprintf("#%d %s %s\n", ts.Unix(), req.Hostname, req.User))); err != nil {
 			log.Fatal(err)
 		}
@@ -88,8 +70,6 @@ func (r myExtendedAgent) Extension(extensionType string, contents []byte) ([]byt
 		return nil, agent.ErrExtensionUnsupported
 	}
 
-	// histfile io.Writer
-	// return []byte("yo Bogus MEssage"), nil
 	return []byte(""), nil
 }
 
@@ -99,7 +79,7 @@ func main() {
 	pipeFile, testmode := os.LookupEnv("TEST_SSH_AUTH_SOCK")
 	if !testmode {
 
-		// Create the SSH Agent Named Pipe
+		// Create the real SSH Agent Named Pipe
 		tmpDir, err := ioutil.TempDir("", "ssh-go")
 		if err != nil {
 			log.Fatal(err)
@@ -130,26 +110,11 @@ func main() {
 
 	hf, err := os.OpenFile(histfilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
-		// log.Println(histfilename)
 		log.Fatal("Could not create/open history file: ", err)
 	}
 	defer hf.Close()
 
-	// if _, err := f.Write([]byte("appended some data\n")); err != nil {
-	// 	log.Fatal(err)
-	// }
 	myExt := myExtendedAgent{agent.NewKeyring(), hf}
-	var ea agent.ExtendedAgent
-	ea = &myExt
-	var a agent.Agent
-	a = ea
-
-	if _, ok := a.(agent.ExtendedAgent); !ok {
-		log.Fatal(a, ok)
-	} else {
-		// eaa.Extension("yo", nil)
-	}
-	// ssh-agent has a UNIX socket under $SSH_AUTH_SOCK
 	// Output the ssh-agent compatible env vars for evaling.
 	fmt.Printf("SSH_AUTH_SOCK=%s; export SSH_AUTH_SOCK;\n", pipeFile)
 	fmt.Printf("SSH_AGENT_PID=%d; export SSH_AGENT_PID;\n", pid)
@@ -161,7 +126,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		println("new Connection", con)
+		log.Println("new Connection", con)
 		handleClient(myExt, con) // should be a go sub?
 	}
 }
